@@ -34,7 +34,7 @@ func NewServer(cfg *config.Config, db *database.Database) *Server {
 		ClientID:     cfg.GitHubClientID,
 		ClientSecret: cfg.GitHubClientSecret,
 		RedirectURL:  cfg.GitHubRedirectURL,
-		Scopes:       []string{"repo", "user:email", "read:org"},
+		Scopes:       []string{"repo", "user:email", "read:org", "read:project", "write:project"},
 		Endpoint:     oauth2gh.Endpoint,
 	}
 
@@ -216,4 +216,17 @@ func (s *Server) GetGitHubClient(discordID string) (*github.Client, error) {
 	tc := oauth2.NewClient(ctx, ts)
 
 	return github.NewClient(tc), nil
+}
+
+func (s *Server) GetGitHubToken(discordID string) (string, error) {
+	user, err := s.db.GetUser(discordID)
+	if err != nil {
+		return "", err
+	}
+
+	if user == nil {
+		return "", fmt.Errorf("user not authenticated with GitHub")
+	}
+
+	return user.GitHubToken, nil
 }

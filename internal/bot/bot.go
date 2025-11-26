@@ -7,6 +7,7 @@ import (
 	"discord-github-bot/internal/config"
 	"discord-github-bot/internal/database"
 	"discord-github-bot/internal/oauth"
+	"discord-github-bot/internal/github/rest"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -17,6 +18,7 @@ type Bot struct {
 	oauth       *oauth.Server
 	session     *discordgo.Session
 	commands    []*discordgo.ApplicationCommand
+	githubREST *rest.GitHubRESTClient
 }
 
 func New(cfg *config.Config, db *database.Database, oauthServer *oauth.Server) (*Bot, error) {
@@ -30,6 +32,7 @@ func New(cfg *config.Config, db *database.Database, oauthServer *oauth.Server) (
 		db:      db,
 		oauth:   oauthServer,
 		session: session,
+		githubREST: rest.NewGitHubRESTClient(),
 	}
 
 	bot.registerCommands()
@@ -179,6 +182,66 @@ func (b *Bot) registerCommands() {
 				},
 			},
 		},
+		{
+			Name:        "gh-project-items-list",
+			Description: "List items in a GitHub project",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "project-number",
+					Description: "The number of the project",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "org",
+					Description: "Organization name (overrides channel default)",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "gh-project-list",
+			Description: "List all GitHub projects in an organization",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "org",
+					Description: "Organization name (overrides channel default)",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "gh-project-add-issue",
+			Description: "Add an existing issue to a GitHub project",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "issue-number",
+					Description: "Issue number to add",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "project-number",
+					Description: "Project number (overrides channel default)",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "repo",
+					Description: "Repository in format: owner/repo (overrides channel default)",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "org",
+					Description: "Organization name (overrides channel default)",
+					Required:    false,
+				},
+			},
+		},
 	}
 }
 
@@ -243,6 +306,12 @@ func (b *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		b.handleIssueClose(s, i)
 	case "gh-issue-comment":
 		b.handleIssueComment(s, i)
+	case "gh-project-items-list":
+		b.handleProjectItemsList(s, i)
+	case "gh-project-list":
+		b.handleProjectList(s, i)
+	case "gh-project-add-issue":
+		b.handleProjectAddIssue(s, i)
 	default:
 		b.respondError(s, i, "Unknown command")
 	}

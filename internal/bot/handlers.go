@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"strconv"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/go-github/v57/github"
@@ -375,4 +376,213 @@ func (b *Bot) handleIssueComment(s *discordgo.Session, i *discordgo.InteractionC
 		number,
 		createdComment.GetHTMLURL(),
 	))
+}
+
+func (b *Bot) handleProjectItemsList(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	userID := i.Member.User.ID
+	projectNumber := b.getIntOption(i.ApplicationCommandData().Options, "project-number")
+	org := b.getStringOption(i.ApplicationCommandData().Options, "org")
+
+	if projectNumber == 0 {
+		settings, err := b.db.GetChannelSettings(i.ChannelID)
+		if err != nil || settings.DefaultProject == "" {
+			b.respondError(s, i, "No project number specified and no default project set for this channel")
+			return
+		}
+		projectNumber = b.stringToIntOption(settings.DefaultProject)
+	}
+
+	if org == "" {
+		// Attempt to derive org from default repo if set
+		settings, err := b.db.GetChannelSettings(i.ChannelID)
+		if err == nil && settings.DefaultRepo != "" {
+			parts := strings.Split(settings.DefaultRepo, "/")
+			if len(parts) == 2 {
+				org = parts[0]
+			}
+		}
+	}
+
+	if org == "" {
+		b.respondError(s, i, "No organization specified and could not derive from default repository.")
+		return
+	}
+
+	accessToken, err := b.oauth.GetGitHubToken(userID)
+	if err != nil {
+		b.respondError(s, i, "You must authenticate first. Use /gh-auth")
+		return
+	}
+
+	projectItemsResponse, err := b.githubREST.ListProjectItems(org, projectNumber, accessToken)
+	if err != nil {
+		log.Printf("Failed to list project items using REST: %v", err)
+		b.respondError(s, i, fmt.Sprintf("Failed to list project items: %v", err))
+		return
+	}
+
+	if len(*projectItemsResponse) == 0 {
+		b.respondSuccess(s, i, fmt.Sprintf("No items found in project #%d for organization %s.", projectNumber, org))
+		return
+	}
+
+	var response strings.Builder
+		response.WriteString(fmt.Sprintf("**Items in Project #%d for %s:**\n\n", projectNumber, org))
+
+	for _, item := range *projectItemsResponse {
+		var title string
+		// Project items can be issues, pull requests, or draft issues.
+		// The API response might not directly give a 'title' field for all types.
+		// We'll try to extract a meaningful identifier.
+		if item.Content != nil && item.Content.Title != "" {
+			title = item.Content.Title
+		} else if item.Content != nil && item.Content.Number != 0 {
+			title = fmt.Sprintf("Issue/PR #%d", item.Content.Number)
+		} else if item.Content != nil && item.Content.Typename != "" {
+			title = fmt.Sprintf("Type: %s", item.Content.Typename)
+		} else {
+			title = "Untitled Item"
+		}
+
+		response.WriteString(fmt.Sprintf("- %s (ID: %s)\n", title, item.NodeID))
+	}
+
+	b.respondSuccess(s, i, response.String())
+}
+
+func (b *Bot) handleProjectList(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	userID := i.Member.User.ID
+	org := b.getStringOption(i.ApplicationCommandData().Options, "org")
+
+	if org == "" {
+		settings, err := b.db.GetChannelSettings(i.ChannelID)
+		if err == nil && settings.DefaultRepo != "" {
+			parts := strings.Split(settings.DefaultRepo, "/")
+			if len(parts) == 2 {
+				org = parts[0]
+			}
+		}
+	}
+
+	if org == "" {
+		b.respondError(s, i, "No organization specified and could not derive from default repository.")
+		return
+	}
+
+	accessToken, err := b.oauth.GetGitHubToken(userID)
+	if err != nil {
+		b.respondError(s, i, "You must authenticate first. Use /gh-auth")
+		return
+	}
+
+	projectsResponse, err := b.githubREST.ListProjects(org, accessToken)
+	if err != nil {
+		log.Printf("Failed to list projects using REST: %v", err)
+		b.respondError(s, i, fmt.Sprintf("Failed to list projects: %v", err))
+		return
+	}
+
+	if len(projectsResponse.Projects) == 0 {
+		b.respondSuccess(s, i, fmt.Sprintf("No projects found for organization %s.", org))
+		return
+	}
+
+	var response strings.Builder
+	response.WriteString(fmt.Sprintf("**Projects for %s:**\n\n", org))
+
+	for _, project := range projectsResponse.Projects {
+		status := "Open"
+		if project.Closed {
+			status = "Closed"
+		}
+		response.WriteString(fmt.Sprintf("**#%d** %s - %s\n%s\n\n", project.Number, project.Title, status, project.HTMLURL))
+	}
+
+	b.respondSuccess(s, i, response.String())
+}
+
+func (b *Bot) handleProjectAddIssue(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	userID := i.Member.User.ID
+	issueNumber := b.getIntOption(i.ApplicationCommandData().Options, "issue-number")
+	projectNumber := b.getIntOption(i.ApplicationCommandData().Options, "project-number")
+	repo := b.getStringOption(i.ApplicationCommandData().Options, "repo")
+	org := b.getStringOption(i.ApplicationCommandData().Options, "org")
+
+	if repo == "" {
+		settings, err := b.db.GetChannelSettings(i.ChannelID)
+		if err != nil || settings.DefaultRepo == "" {
+			b.respondError(s, i, "No repository specified and no default repository set for this channel")
+			return
+		}
+		repo = settings.DefaultRepo
+	}
+
+	parts := strings.Split(repo, "/")
+	if len(parts) != 2 {
+		b.respondError(s, i, "Invalid repository format. Use: owner/repo")
+		return
+	}
+	owner, repoName := parts[0], parts[1]
+
+	if org == "" {
+		org = owner
+	}
+
+	if projectNumber == 0 {
+		settings, err := b.db.GetChannelSettings(i.ChannelID)
+		if err != nil || settings.DefaultProject == "" {
+			b.respondError(s, i, "No project number specified and no default project set for this channel")
+			return
+		}
+		projectNumber = b.stringToIntOption(settings.DefaultProject)
+	}
+
+	accessToken, err := b.oauth.GetGitHubToken(userID)
+	if err != nil {
+		b.respondError(s, i, "You must authenticate first. Use /gh-auth")
+		return
+	}
+
+	// Get the issue to retrieve its node ID
+	client, err := b.oauth.GetGitHubClient(userID)
+	if err != nil {
+		b.respondError(s, i, "You must authenticate first. Use /gh-auth")
+		return
+	}
+
+	ctx := context.Background()
+	issue, _, err := client.Issues.Get(ctx, owner, repoName, issueNumber)
+	if err != nil {
+		log.Printf("Failed to get issue: %v", err)
+		b.respondError(s, i, fmt.Sprintf("Failed to get issue: %v", err))
+		return
+	}
+
+	issueNodeID := issue.GetNodeID()
+
+	// Add issue to project using REST API
+	addItemResponse, err := b.githubREST.AddIssueToProject(org, projectNumber, issueNodeID, accessToken)
+	if err != nil {
+		log.Printf("Failed to add issue to project using REST: %v", err)
+		b.respondError(s, i, fmt.Sprintf("Failed to add issue to project: %v", err))
+		return
+	}
+
+	b.respondSuccess(s, i, fmt.Sprintf(
+		"✅ Issue #%d added to project #%d\nItem ID: %s",
+		issueNumber,
+		projectNumber,
+		addItemResponse.ID,
+	))
+}
+
+// stringToIntOption converts a string to an int.
+// It's a helper function for getting int options when they might come from string settings.
+func (b *Bot) stringToIntOption(s string) int {
+	val, err := strconv.Atoi(s)
+	if err != nil {
+		log.Printf("Failed to convert string to int: %v", err)
+		return 0
+	}
+	return val
 }
