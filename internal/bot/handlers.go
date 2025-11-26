@@ -83,6 +83,23 @@ func (b *Bot) handleSetProject(s *discordgo.Session, i *discordgo.InteractionCre
 	project := b.getStringOption(i.ApplicationCommandData().Options, "project")
 	channelID := i.ChannelID
 
+	// Parse GitHub project URL if provided
+	// Format: https://github.com/orgs/{org}/projects/{number}
+	var projectValue string
+	if after, found := strings.CutPrefix(project, "https://github.com/orgs/"); found {
+		parts := strings.Split(after, "/")
+		if len(parts) >= 3 && parts[1] == "projects" {
+			org := parts[0]
+			projectNumber := parts[2]
+			projectValue = fmt.Sprintf("%s/%s", org, projectNumber)
+		} else {
+			b.respondError(s, i, "Invalid GitHub project URL format. Expected: https://github.com/orgs/{org}/projects/{number}")
+			return
+		}
+	} else {
+		projectValue = project
+	}
+
 	settings, err := b.db.GetChannelSettings(channelID)
 	if err != nil {
 		log.Printf("Failed to get channel settings: %v", err)
@@ -90,7 +107,7 @@ func (b *Bot) handleSetProject(s *discordgo.Session, i *discordgo.InteractionCre
 		return
 	}
 
-	settings.DefaultProject = project
+	settings.DefaultProject = projectValue
 
 	if err := b.db.SaveChannelSettings(settings); err != nil {
 		log.Printf("Failed to save channel settings: %v", err)
@@ -98,7 +115,7 @@ func (b *Bot) handleSetProject(s *discordgo.Session, i *discordgo.InteractionCre
 		return
 	}
 
-	b.respondSuccess(s, i, fmt.Sprintf("✅ Default project set to: %s", project))
+	b.respondSuccess(s, i, fmt.Sprintf("✅ Default project set to: %s", projectValue))
 }
 
 func (b *Bot) handleIssueCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -383,28 +400,25 @@ func (b *Bot) handleProjectItemsList(s *discordgo.Session, i *discordgo.Interact
 	projectNumber := b.getIntOption(i.ApplicationCommandData().Options, "project-number")
 	org := b.getStringOption(i.ApplicationCommandData().Options, "org")
 
-	if projectNumber == 0 {
+	if projectNumber == 0 || org == "" {
 		settings, err := b.db.GetChannelSettings(i.ChannelID)
 		if err != nil || settings.DefaultProject == "" {
-			b.respondError(s, i, "No project number specified and no default project set for this channel")
+			b.respondError(s, i, "No project specified and no default project set for this channel")
 			return
 		}
-		projectNumber = b.stringToIntOption(settings.DefaultProject)
-	}
 
-	if org == "" {
-		// Attempt to derive org from default repo if set
-		settings, err := b.db.GetChannelSettings(i.ChannelID)
-		if err == nil && settings.DefaultRepo != "" {
-			parts := strings.Split(settings.DefaultRepo, "/")
-			if len(parts) == 2 {
-				org = parts[0]
-			}
+		// Parse default project value in format "org/number"
+		defaultOrg, defaultProjectNumber := b.parseProjectValue(settings.DefaultProject)
+		if projectNumber == 0 {
+			projectNumber = defaultProjectNumber
+		}
+		if org == "" {
+			org = defaultOrg
 		}
 	}
 
-	if org == "" {
-		b.respondError(s, i, "No organization specified and could not derive from default repository.")
+	if org == "" || projectNumber == 0 {
+		b.respondError(s, i, "No organization or project number specified and could not derive from default project.")
 		return
 	}
 
@@ -524,17 +538,30 @@ func (b *Bot) handleProjectAddIssue(s *discordgo.Session, i *discordgo.Interacti
 	}
 	owner, repoName := parts[0], parts[1]
 
-	if org == "" {
-		org = owner
-	}
-
-	if projectNumber == 0 {
+	if projectNumber == 0 || org == "" {
 		settings, err := b.db.GetChannelSettings(i.ChannelID)
 		if err != nil || settings.DefaultProject == "" {
-			b.respondError(s, i, "No project number specified and no default project set for this channel")
-			return
+			if org == "" {
+				org = owner
+			}
+			if projectNumber == 0 {
+				b.respondError(s, i, "No project number specified and no default project set for this channel")
+				return
+			}
+		} else {
+			// Parse default project value in format "org/number"
+			defaultOrg, defaultProjectNumber := b.parseProjectValue(settings.DefaultProject)
+			if projectNumber == 0 {
+				projectNumber = defaultProjectNumber
+			}
+			if org == "" {
+				org = defaultOrg
+			}
 		}
-		projectNumber = b.stringToIntOption(settings.DefaultProject)
+	}
+
+	if org == "" {
+		org = owner
 	}
 
 	accessToken, err := b.oauth.GetGitHubToken(userID)
@@ -585,4 +612,17 @@ func (b *Bot) stringToIntOption(s string) int {
 		return 0
 	}
 	return val
+}
+
+// parseProjectValue parses a project value in format "org/number" and returns org and project number.
+// If the format is invalid, it returns empty string and 0.
+func (b *Bot) parseProjectValue(projectValue string) (org string, projectNumber int) {
+	parts := strings.Split(projectValue, "/")
+	if len(parts) != 2 {
+		log.Printf("Invalid project value format: %s", projectValue)
+		return "", 0
+	}
+
+	projectNumber = b.stringToIntOption(parts[1])
+	return parts[0], projectNumber
 }
