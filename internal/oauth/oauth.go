@@ -34,7 +34,7 @@ func NewServer(cfg *config.Config, db *database.Database) *Server {
 		ClientID:     cfg.GitHubClientID,
 		ClientSecret: cfg.GitHubClientSecret,
 		RedirectURL:  cfg.GitHubRedirectURL,
-		Scopes:       []string{"repo", "user:email"},
+		Scopes:       []string{"repo", "user:email", "read:org"},
 		Endpoint:     oauth2gh.Endpoint,
 	}
 
@@ -74,7 +74,7 @@ func (s *Server) GenerateAuthURL(discordID string) string {
 		s.statesMu.Unlock()
 	}()
 
-	return s.oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOnline)
+	return s.oauthConfig.AuthCodeURL(state, oauth2.AccessTypeOnline, oauth2.SetAuthURLParam("prompt", "select_account"))
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {

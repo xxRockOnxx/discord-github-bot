@@ -12,10 +12,29 @@ import (
 
 func (b *Bot) handleAuth(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	userID := i.Member.User.ID
+
+	// Check if the user is already authenticated
+	user, err := b.db.GetUser(userID)
+	if err != nil {
+		log.Printf("Failed to get user from DB: %v", err)
+		b.respondError(s, i, "An error occurred while checking authentication status.")
+		return
+	}
+
+	if user != nil {
+		// User is already authenticated
+		b.respondEphemeral(s, i, fmt.Sprintf(
+			"You are already authenticated as **%s**. If you wish to authenticate with a different GitHub account, please use the `/gh-unauth` command first, then try `/gh-auth` again. You may also need to clear your browser's GitHub cookies or use an incognito/private browsing window.",
+			user.GitHubUsername,
+		))
+		return
+	}
+
+	// User is not authenticated, proceed with original flow
 	authURL := fmt.Sprintf("%s/auth?discord_id=%s", b.config.PublicURL, userID)
 
 	b.respondEphemeral(s, i, fmt.Sprintf(
-		"Click the link below to authenticate with GitHub:\n%s\n\nThis link will expire in 10 minutes.",
+		"Click the link below to authenticate with **one** GitHub account:\n%s\n\nThis link will expire in 10 minutes. If you wish to switch accounts later, use `/gh-unauth` first.",
 		authURL,
 	))
 }
