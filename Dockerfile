@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o discord-github-bot main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -installsuffix cgo -ldflags="-w -s" -o discord-github-bot main.go
 
 # Runtime stage
 FROM alpine:latest
