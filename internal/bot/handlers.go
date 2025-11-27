@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"strconv"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/go-github/v57/github"
@@ -677,10 +677,10 @@ func (b *Bot) handleProjectAddIssue(s *discordgo.Session, i *discordgo.Interacti
 		return
 	}
 
-	issueNodeID := issue.GetNodeID()
+	issueID := int(issue.GetID())
 
 	// Add issue to project using REST API
-	addItemResponse, err := b.githubREST.AddIssueToProject(org, projectNumber, issueNodeID, accessToken)
+	_, err = b.githubREST.AddIssueToProject(org, projectNumber, issueID, accessToken)
 	if err != nil {
 		log.Printf("Failed to add issue to project using REST: %v", err)
 		b.respondError(s, i, fmt.Sprintf("Failed to add issue to project: %v", err))
@@ -688,10 +688,9 @@ func (b *Bot) handleProjectAddIssue(s *discordgo.Session, i *discordgo.Interacti
 	}
 
 	b.respondSuccess(s, i, fmt.Sprintf(
-		"✅ Issue #%d added to project #%d\nItem ID: %s",
+		"✅ Issue #%d added to project #%d",
 		issueNumber,
 		projectNumber,
-		addItemResponse.ID,
 	))
 }
 

@@ -10,13 +10,13 @@ import (
 )
 
 type GitHubRESTClient struct {
-	BaseURL string
+	BaseURL    string
 	HTTPClient *http.Client
 }
 
 func NewGitHubRESTClient() *GitHubRESTClient {
 	return &GitHubRESTClient{
-		BaseURL: "https://api.github.com",
+		BaseURL:    "https://api.github.com",
 		HTTPClient: &http.Client{},
 	}
 }
@@ -39,7 +39,7 @@ func (c *GitHubRESTClient) DoRequest(method, path, token string, body []byte) ([
 	}
 
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer " + token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -121,11 +121,12 @@ func (c *GitHubRESTClient) ListProjects(org string, token string, perPage int, q
 	return &projectsResponse, nil
 }
 
-func (c *GitHubRESTClient) AddIssueToProject(org string, projectNumber int, issueNodeID string, token string) (*AddItemResponse, error) {
+func (c *GitHubRESTClient) AddIssueToProject(org string, projectNumber int, issueID int, token string) (*ProjectsV2Item, error) {
 	path := fmt.Sprintf("/orgs/%s/projectsV2/%d/items", org, projectNumber)
 
 	reqBody := AddItemRequest{
-		ContentID: issueNodeID,
+		Type: "Issue",
+		ID:   issueID,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
@@ -138,7 +139,7 @@ func (c *GitHubRESTClient) AddIssueToProject(org string, projectNumber int, issu
 		return nil, err
 	}
 
-	var addItemResponse AddItemResponse
+	var addItemResponse ProjectsV2Item
 	err = json.Unmarshal(respBody, &addItemResponse)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal add item response: %w", err)
