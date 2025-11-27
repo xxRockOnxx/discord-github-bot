@@ -92,8 +92,21 @@ func (c *GitHubRESTClient) ListProjectItems(org string, projectNumber int, token
 	return &projectItemsResponse, nil
 }
 
-func (c *GitHubRESTClient) ListProjects(org string, token string) (*ProjectsV2Response, error) {
-	path := fmt.Sprintf("/orgs/%s/projectsV2", org)
+func (c *GitHubRESTClient) ListProjects(org string, token string, perPage int, query string) (*ProjectsV2Response, error) {
+	path := fmt.Sprintf("/orgs/%s/projects", org)
+
+	// Add query parameters
+	if perPage > 0 || query != "" {
+		params := url.Values{}
+		if perPage > 0 {
+			params.Add("per_page", fmt.Sprintf("%d", perPage))
+		}
+		if query != "" {
+			params.Add("q", query)
+		}
+		path += "?" + params.Encode()
+	}
+
 	body, err := c.DoRequest(http.MethodGet, path, token, nil)
 	if err != nil {
 		return nil, err

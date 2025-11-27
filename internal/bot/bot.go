@@ -216,6 +216,12 @@ func (b *Bot) registerCommands() {
 					Description: "Organization name (overrides channel default)",
 					Required:    false,
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "query",
+					Description: "Filter query (default: is:open)",
+					Required:    false,
+				},
 			},
 		},
 		{

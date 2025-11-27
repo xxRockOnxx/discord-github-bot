@@ -507,6 +507,12 @@ func (b *Bot) handleProjectItemsList(s *discordgo.Session, i *discordgo.Interact
 func (b *Bot) handleProjectList(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	userID := i.Member.User.ID
 	org := b.getStringOption(i.ApplicationCommandData().Options, "org")
+	query := b.getStringOption(i.ApplicationCommandData().Options, "query")
+
+	// Default query if not provided
+	if query == "" {
+		query = "is:open"
+	}
 
 	if org == "" {
 		settings, err := b.db.GetChannelSettings(i.ChannelID)
@@ -529,7 +535,7 @@ func (b *Bot) handleProjectList(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
-	projectsResponse, err := b.githubREST.ListProjects(org, accessToken)
+	projectsResponse, err := b.githubREST.ListProjects(org, accessToken, 10, query)
 	if err != nil {
 		log.Printf("Failed to list projects using REST: %v", err)
 		b.respondError(s, i, fmt.Sprintf("Failed to list projects: %v", err))
@@ -537,7 +543,7 @@ func (b *Bot) handleProjectList(s *discordgo.Session, i *discordgo.InteractionCr
 	}
 
 	if len(projectsResponse.Projects) == 0 {
-		b.respondSuccess(s, i, fmt.Sprintf("No projects found for organization %s.", org))
+		b.respondSuccess(s, i, fmt.Sprintf("No projects found for organization %s with query: %s", org, query))
 		return
 	}
 
@@ -549,7 +555,7 @@ func (b *Bot) handleProjectList(s *discordgo.Session, i *discordgo.InteractionCr
 		if project.Closed {
 			status = "Closed"
 		}
-		response.WriteString(fmt.Sprintf("**#%d** %s - %s\n%s\n\n", project.Number, project.Title, status, project.HTMLURL))
+		response.WriteString(fmt.Sprintf("**[#%d %s](%s)** (Status: %s)\n", project.Number, project.Title, project.HTMLURL, status))
 	}
 
 	b.respondSuccess(s, i, response.String())
