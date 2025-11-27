@@ -45,7 +45,7 @@ Stop context-switching between Discord and GitHub. Manage your entire issue work
 
 ### 🎛️ Smart Configuration
 - **Channel-Specific Defaults** - Set repository per channel
-- **Project Integration** - Link to GitHub Projects
+- **Project Integration** - Link to GitHub Projects with pagination and filtering
 - **Modern Slash Commands** - Intuitive autocomplete
 
 ### 🐳 Deployment Ready
@@ -336,7 +336,7 @@ Set up defaults so you don't repeat yourself:
 
 <tr>
 <td><code>/gh-issue-list</code></td>
-<td>List issues (open/closed/all)</td>
+<td>List issues (open/closed/all), with pagination and filtering</td>
 <td><code>/gh-issue-list state:open</code></td>
 </tr>
 
@@ -356,6 +356,30 @@ Set up defaults so you don't repeat yourself:
 <td><code>/gh-issue-comment</code></td>
 <td>Add a comment to an issue</td>
 <td><code>/gh-issue-comment number:42 comment:"Fixed!"</code></td>
+</tr>
+
+<tr>
+<td><code>/gh-project-item-list</code></td>
+<td>List project items (open/closed/all), with pagination and filtering</td>
+<td><code>/gh-project-item-list project:123 state:open</code></td>
+</tr>
+
+<tr>
+<td><code>/gh-project-item-create</code></td>
+<td>Create a new project item</td>
+<td><code>/gh-project-item-create project:123 title:"New Feature" body:"Implement X"</code></td>
+</tr>
+
+<tr>
+<td><code>/gh-project-item-view</code></td>
+<td>View detailed project item information</td>
+<td><code>/gh-project-item-view project:123 item-id:456</code></td>
+</tr>
+
+<tr>
+<td><code>/gh-project-item-archive</code></td>
+<td>Archive a project item</td>
+<td><code>/gh-project-item-archive project:123 item-id:456</code></td>
 </tr>
 
 </table>
