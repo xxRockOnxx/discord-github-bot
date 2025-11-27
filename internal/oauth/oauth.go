@@ -34,7 +34,7 @@ func NewServer(cfg *config.Config, db *database.Database) *Server {
 		ClientID:     cfg.GitHubClientID,
 		ClientSecret: cfg.GitHubClientSecret,
 		RedirectURL:  cfg.GitHubRedirectURL,
-		Scopes:       []string{"repo", "user:email", "read:org", "read:project", "write:project"},
+		Scopes:       []string{"repo", "user:email", "read:org", "project"},
 		Endpoint:     oauth2gh.Endpoint,
 	}
 
