@@ -120,6 +120,12 @@ func (b *Bot) registerCommands() {
 						{Name: "all", Value: "all"},
 					},
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "query",
+					Description: "Additional filter query (e.g., assignee:username, label:bug)",
+					Required:    false,
+				},
 			},
 		},
 		{

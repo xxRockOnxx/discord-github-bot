@@ -171,6 +171,7 @@ func (b *Bot) handleIssueList(s *discordgo.Session, i *discordgo.InteractionCrea
 	userID := i.Member.User.ID
 	repo := b.getStringOption(i.ApplicationCommandData().Options, "repo")
 	state := b.getStringOption(i.ApplicationCommandData().Options, "state")
+	query := b.getStringOption(i.ApplicationCommandData().Options, "query")
 
 	if state == "" {
 		state = "open"
@@ -199,6 +200,47 @@ func (b *Bot) handleIssueList(s *discordgo.Session, i *discordgo.InteractionCrea
 	}
 
 	ctx := context.Background()
+
+	// Use search API if query is provided for better filtering
+	if query != "" {
+		searchQuery := fmt.Sprintf("repo:%s/%s state:%s %s", owner, repoName, state, query)
+		searchOpts := &github.SearchOptions{
+			ListOptions: github.ListOptions{PerPage: 10},
+		}
+
+		result, _, err := client.Search.Issues(ctx, searchQuery, searchOpts)
+		if err != nil {
+			log.Printf("Failed to search issues: %v", err)
+			b.respondError(s, i, fmt.Sprintf("Failed to search issues: %v", err))
+			return
+		}
+
+		if result.GetTotal() == 0 {
+			b.respondSuccess(s, i, fmt.Sprintf("No issues found in %s matching query: %s", repo, query))
+			return
+		}
+
+		var response strings.Builder
+		response.WriteString(fmt.Sprintf("**Issues in %s (state:%s, query:%s):**\n\n", repo, state, query))
+
+		for _, issue := range result.Issues {
+			issueState := "Open"
+			if issue.GetState() == "closed" {
+				issueState = "Closed"
+			}
+			response.WriteString(fmt.Sprintf("**[Issue #%d](%s)** %s (Status: %s)\n",
+				issue.GetNumber(),
+				issue.GetHTMLURL(),
+				issue.GetTitle(),
+				issueState,
+			))
+		}
+
+		b.respondSuccess(s, i, response.String())
+		return
+	}
+
+	// Use regular list API for simple state filtering
 	opts := &github.IssueListByRepoOptions{
 		State:       state,
 		ListOptions: github.ListOptions{PerPage: 10},
@@ -217,14 +259,18 @@ func (b *Bot) handleIssueList(s *discordgo.Session, i *discordgo.InteractionCrea
 	}
 
 	var response strings.Builder
-	response.WriteString(fmt.Sprintf("**Issues in %s (%s):**\n\n", repo, state))
+	response.WriteString(fmt.Sprintf("**Issues in %s (state:%s):**\n\n", repo, state))
 
 	for _, issue := range issues {
-		response.WriteString(fmt.Sprintf(
-			"**#%d** %s\n%s\n\n",
+		issueState := "Open"
+		if issue.GetState() == "closed" {
+			issueState = "Closed"
+		}
+		response.WriteString(fmt.Sprintf("**[Issue #%d](%s)** %s (Status: %s)\n",
 			issue.GetNumber(),
-			issue.GetTitle(),
 			issue.GetHTMLURL(),
+			issue.GetTitle(),
+			issueState,
 		))
 	}
 
