@@ -158,6 +158,17 @@ func (b *Bot) registerCommands() {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "state_reason",
+					Description: "Reason for closing the issue",
+					Required:    true,
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "completed", Value: "completed"},
+						{Name: "not_planned", Value: "not_planned"},
+						{Name: "duplicate", Value: "duplicate"},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "repo",
 					Description: "Repository (overrides channel default)",
 					Required:    false,

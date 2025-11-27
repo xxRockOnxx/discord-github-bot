@@ -348,8 +348,8 @@ Set up defaults so you don't repeat yourself:
 
 <tr>
 <td><code>/gh-issue-close</code></td>
-<td>Close an issue</td>
-<td><code>/gh-issue-close number:42</code></td>
+<td>Close an issue with a reason (completed, not_planned, or duplicate)</td>
+<td><code>/gh-issue-close number:42 state_reason:completed</code></td>
 </tr>
 
 <tr>

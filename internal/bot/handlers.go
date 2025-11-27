@@ -350,6 +350,7 @@ func (b *Bot) handleIssueView(s *discordgo.Session, i *discordgo.InteractionCrea
 func (b *Bot) handleIssueClose(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	userID := i.Member.User.ID
 	number := b.getIntOption(i.ApplicationCommandData().Options, "number")
+	stateReason := b.getStringOption(i.ApplicationCommandData().Options, "state_reason")
 	repo := b.getStringOption(i.ApplicationCommandData().Options, "repo")
 
 	if repo == "" {
@@ -377,7 +378,8 @@ func (b *Bot) handleIssueClose(s *discordgo.Session, i *discordgo.InteractionCre
 	ctx := context.Background()
 	state := "closed"
 	issueRequest := &github.IssueRequest{
-		State: &state,
+		State:       &state,
+		StateReason: &stateReason,
 	}
 
 	closedIssue, _, err := client.Issues.Edit(ctx, owner, repoName, number, issueRequest)
@@ -388,8 +390,9 @@ func (b *Bot) handleIssueClose(s *discordgo.Session, i *discordgo.InteractionCre
 	}
 
 	b.respondSuccess(s, i, fmt.Sprintf(
-		"✅ Issue #%d closed successfully!\n%s",
+		"✅ Issue #%d closed successfully with reason: %s\n%s",
 		closedIssue.GetNumber(),
+		stateReason,
 		closedIssue.GetHTMLURL(),
 	))
 }
