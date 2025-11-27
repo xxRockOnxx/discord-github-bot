@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -62,8 +63,21 @@ func (c *GitHubRESTClient) DoRequest(method, path, token string, body []byte) ([
 	return respBody, nil
 }
 
-func (c *GitHubRESTClient) ListProjectItems(org string, projectNumber int, token string) (*ProjectsV2ItemsResponse, error) {
+func (c *GitHubRESTClient) ListProjectItems(org string, projectNumber int, token string, perPage int, query string) (*ProjectsV2ItemsResponse, error) {
 	path := fmt.Sprintf("/orgs/%s/projectsV2/%d/items", org, projectNumber)
+
+	// Add query parameters
+	if perPage > 0 || query != "" {
+		params := url.Values{}
+		if perPage > 0 {
+			params.Add("per_page", fmt.Sprintf("%d", perPage))
+		}
+		if query != "" {
+			params.Add("q", query)
+		}
+		path += "?" + params.Encode()
+	}
+
 	body, err := c.DoRequest(http.MethodGet, path, token, nil)
 	if err != nil {
 		return nil, err

@@ -399,6 +399,12 @@ func (b *Bot) handleProjectItemsList(s *discordgo.Session, i *discordgo.Interact
 	userID := i.Member.User.ID
 	projectNumber := b.getIntOption(i.ApplicationCommandData().Options, "project-number")
 	org := b.getStringOption(i.ApplicationCommandData().Options, "org")
+	query := b.getStringOption(i.ApplicationCommandData().Options, "query")
+
+	// Default query if not provided
+	if query == "" {
+		query = "-is:closed -is:done"
+	}
 
 	if projectNumber == 0 || org == "" {
 		settings, err := b.db.GetChannelSettings(i.ChannelID)
@@ -428,7 +434,7 @@ func (b *Bot) handleProjectItemsList(s *discordgo.Session, i *discordgo.Interact
 		return
 	}
 
-	projectItemsResponse, err := b.githubREST.ListProjectItems(org, projectNumber, accessToken)
+	projectItemsResponse, err := b.githubREST.ListProjectItems(org, projectNumber, accessToken, 10, query)
 	if err != nil {
 		log.Printf("Failed to list project items using REST: %v", err)
 		b.respondError(s, i, fmt.Sprintf("Failed to list project items: %v", err))
@@ -436,29 +442,63 @@ func (b *Bot) handleProjectItemsList(s *discordgo.Session, i *discordgo.Interact
 	}
 
 	if len(*projectItemsResponse) == 0 {
-		b.respondSuccess(s, i, fmt.Sprintf("No items found in project #%d for organization %s.", projectNumber, org))
+		b.respondSuccess(s, i, fmt.Sprintf("No items found in project #%d for organization %s with query: %s", projectNumber, org, query))
 		return
 	}
 
 	var response strings.Builder
-		response.WriteString(fmt.Sprintf("**Items in Project #%d for %s:**\n\n", projectNumber, org))
+	response.WriteString(fmt.Sprintf("**Items in Project #%d for %s:**\n\n", projectNumber, org))
 
 	for _, item := range *projectItemsResponse {
-		var title string
-		// Project items can be issues, pull requests, or draft issues.
-		// The API response might not directly give a 'title' field for all types.
-		// We'll try to extract a meaningful identifier.
-		if item.Content != nil && item.Content.Title != "" {
-			title = item.Content.Title
-		} else if item.Content != nil && item.Content.Number != 0 {
-			title = fmt.Sprintf("Issue/PR #%d", item.Content.Number)
-		} else if item.Content != nil && item.Content.Typename != "" {
-			title = fmt.Sprintf("Type: %s", item.Content.Typename)
-		} else {
+		// Skip if no content
+		if item.Content == nil {
+			continue
+		}
+
+		// Determine item type
+		var itemType string
+		switch item.ContentType {
+		case "Issue":
+			itemType = "Issue"
+		case "PullRequest":
+			itemType = "Pull Request"
+		case "DraftIssue":
+			itemType = "Draft"
+		default:
+			itemType = item.ContentType
+		}
+
+		title := item.Content.Title
+		if title == "" {
 			title = "Untitled Item"
 		}
 
-		response.WriteString(fmt.Sprintf("- %s (ID: %s)\n", title, item.NodeID))
+		// Get status from fields
+		status := "Open"
+		for _, field := range item.Fields {
+			if name, ok := field["name"].(string); ok && (name == "Status" || name == "status") {
+				if value, ok := field["value"].(string); ok {
+					status = value
+				}
+			}
+		}
+
+		// Format: **[Issue #123]** This is a table (Status: Open)
+		var line string
+		if item.Content.Number != 0 {
+			if item.Content.HTMLURL != "" {
+				line = fmt.Sprintf("**[%s #%d](%s)** %s (Status: %s)\n",
+					itemType, item.Content.Number, item.Content.HTMLURL, title, status)
+			} else {
+				line = fmt.Sprintf("**[%s #%d]** %s (Status: %s)\n",
+					itemType, item.Content.Number, title, status)
+			}
+		} else {
+			// Draft issues don't have numbers
+			line = fmt.Sprintf("**[%s]** %s (Status: %s)\n",
+				itemType, title, status)
+		}
+		response.WriteString(line)
 	}
 
 	b.respondSuccess(s, i, response.String())

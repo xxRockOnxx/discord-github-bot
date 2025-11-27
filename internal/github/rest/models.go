@@ -19,6 +19,7 @@ type ProjectsV2Item struct {
 type ItemContent struct {
 	Title    string `json:"title"`
 	Number   int    `json:"number"`
+	HTMLURL  string `json:"html_url"`
 	Typename string `json:"__typename"` // GraphQL typename, often used to differentiate content types
 }
 
